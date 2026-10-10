@@ -1,0 +1,6 @@
+{
+  "name": "SpotHire - Walk-in Drives & Passes",
+  "description": "Instant same-day walk-in interview drives and digital boarding passes for job seekers and recruiters.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
