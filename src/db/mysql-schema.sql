@@ -60,6 +60,17 @@ CREATE TABLE IF NOT EXISTS referrals (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
+-- 4. Recruiter & Company Studio Accounts Table
+CREATE TABLE IF NOT EXISTS recruiter_accounts (
+  id VARCHAR(64) PRIMARY KEY,
+  email VARCHAR(160) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  name VARCHAR(120) NOT NULL,
+  company_name VARCHAR(120) NOT NULL,
+  role VARCHAR(32) NOT NULL DEFAULT 'recruiter',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
 -- Pre-seeded Initial Records
 INSERT INTO drives (
   id, company_name, logo_bg, logo_initial, role_title, date_category, exact_date_display, interview_type,

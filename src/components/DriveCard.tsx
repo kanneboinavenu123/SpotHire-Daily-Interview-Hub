@@ -57,9 +57,15 @@ export const DriveCard: React.FC<DriveCardProps> = ({ drive, onBookSlot, onShare
         <span>·</span>
         <span>{drive.vacancies} Vacancies</span>
         <span>·</span>
-        <span className="text-amber-800 font-semibold bg-amber-50 border border-amber-100/80 px-1.5 py-0.5 rounded font-mono text-[11px]">
-          {drive.remaining_slots} slots left
-        </span>
+        {drive.remaining_slots <= 0 ? (
+          <span className="text-rose-700 font-bold bg-rose-50 border border-rose-200 px-2 py-0.5 rounded font-mono text-[11px]">
+            Housefull · 0 slots left
+          </span>
+        ) : (
+          <span className="text-amber-800 font-semibold bg-amber-50 border border-amber-100/80 px-1.5 py-0.5 rounded font-mono text-[11px]">
+            {drive.remaining_slots} slots left
+          </span>
+        )}
       </div>
 
       {/* Location / Venue Bar matching Image 1 */}
@@ -94,11 +100,16 @@ export const DriveCard: React.FC<DriveCardProps> = ({ drive, onBookSlot, onShare
       <div className="pt-1 flex items-center space-x-2">
         <button
           type="button"
+          disabled={drive.remaining_slots <= 0}
           onClick={() => onBookSlot(drive)}
-          className="flex-1 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white text-xs font-bold py-2.5 rounded-xl shadow-sm transition flex items-center justify-center space-x-1.5"
+          className={`flex-1 text-xs font-bold py-2.5 rounded-xl shadow-xs transition flex items-center justify-center space-x-1.5 ${
+            drive.remaining_slots <= 0
+              ? 'bg-slate-200 text-slate-500 border border-slate-300 cursor-not-allowed'
+              : 'bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white shadow-sm'
+          }`}
         >
-          <span>Book Interview Slot</span>
-          <ArrowRight className="w-3.5 h-3.5" />
+          <span>{drive.remaining_slots <= 0 ? 'Drive Full · 0 Slots Remaining' : 'Book Interview Slot'}</span>
+          {drive.remaining_slots > 0 && <ArrowRight className="w-3.5 h-3.5" />}
         </button>
         <button
           type="button"

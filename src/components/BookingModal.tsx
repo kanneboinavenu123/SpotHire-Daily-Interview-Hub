@@ -30,10 +30,22 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [candidatePhone, setCandidatePhone] = useState('+91 98765 43210');
   const [candidateLink, setCandidateLink] = useState('https://linkedin.com/in/kavya-sharma-dev');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!candidateName.trim() || !candidatePhone.trim()) return;
+    setErrorMsg(null);
+
+    if (drive.remaining_slots <= 0) {
+      setErrorMsg('This drive is sold out. No slots remain.');
+      return;
+    }
+
+    const cleanPhone = candidatePhone.replace(/\D/g, '');
+    if (cleanPhone.length < 10) {
+      setErrorMsg('Please enter a valid 10-digit mobile number for pass confirmation.');
+      return;
+    }
 
     try {
       setIsSubmitting(true);
@@ -45,8 +57,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({
         selected_slot: selectedSlot,
       });
       onClose();
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to reserve slot. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -162,6 +174,14 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               />
             </div>
           </div>
+
+          {/* Validation / Duplication / Full Error Banner */}
+          {errorMsg && (
+            <div className="bg-rose-50 border border-rose-200 text-rose-800 rounded-xl p-3 text-xs flex items-start space-x-2 animate-in fade-in">
+              <span className="text-rose-600 font-bold shrink-0">⚠️</span>
+              <div className="leading-relaxed font-medium">{errorMsg}</div>
+            </div>
+          )}
 
           {/* Submit CTA */}
           <button

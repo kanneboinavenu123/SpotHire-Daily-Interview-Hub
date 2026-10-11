@@ -12,6 +12,26 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 app.use(express.json());
 
 // API Endpoints
+// Recruiter Authentication Routes
+app.post('/api/auth/recruiter-login', (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const session = db.loginRecruiter(email, password);
+    res.json(session);
+  } catch (error: any) {
+    res.status(401).json({ error: error.message });
+  }
+});
+
+app.post('/api/auth/recruiter-register', (req, res) => {
+  try {
+    const session = db.registerRecruiter(req.body);
+    res.status(201).json(session);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 app.get('/api/drives', (_req, res) => {
   try {
     const drives = db.getDrives();
@@ -64,6 +84,27 @@ app.post('/api/passes/:id/checkin', (req, res) => {
     res.json(verified);
   } catch (error: any) {
     res.status(404).json({ error: error.message });
+  }
+});
+
+// Fix #1.3: Cancel pass and release slot back to drive pool
+app.post('/api/passes/:id/cancel', (req, res) => {
+  try {
+    const result = db.cancelPass(req.params.id);
+    res.json(result);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Fix #2.1: Gate reception token validator for HR / gate security
+app.post('/api/passes/verify-gate-token', (req, res) => {
+  try {
+    const { token, gate_note } = req.body;
+    const verified = db.verifyGateToken(token, gate_note);
+    res.json(verified);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
   }
 });
 

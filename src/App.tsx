@@ -11,21 +11,33 @@ import { ReferralsView } from './components/ReferralsView.tsx';
 import { BookingModal } from './components/BookingModal.tsx';
 import { QrModal } from './components/QrModal.tsx';
 import { MysqlStudioModal } from './components/MysqlStudioModal.tsx';
+import { RecruiterAuthModal } from './components/RecruiterAuthModal.tsx';
 import { BottomNav } from './components/BottomNav.tsx';
 import {
   fetchDrives,
   createDrive,
   fetchPasses,
   createPass,
+  cancelPass,
+  verifyGateToken,
   updatePassStage,
   checkInPass,
   fetchReferrals,
   recordShare,
 } from './services/api.ts';
-import { Drive, InterviewPass, ReferralData } from './types/index.ts';
+import { Drive, InterviewPass, ReferralData, RecruiterSession } from './types/index.ts';
 
 export default function App() {
-  const [role, setRole] = useState<'candidate' | 'recruiter'>('candidate');
+  const [recruiterSession, setRecruiterSession] = useState<RecruiterSession | null>(() => {
+    try {
+      const stored = localStorage.getItem('spothire_recruiter');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [isRecruiterAuthModalOpen, setIsRecruiterAuthModalOpen] = useState<boolean>(false);
+
   const [activeTab, setActiveTab] = useState<'drives' | 'passes' | 'studio' | 'referrals'>('drives');
   const [dateFilter, setDateFilter] = useState<string>('Today');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -67,25 +79,36 @@ export default function App() {
     fetchReferrals().then(setReferralData);
   }, []);
 
-  // Dual-role sync
-  const handleRoleChange = (newRole: 'candidate' | 'recruiter') => {
-    setRole(newRole);
-    if (newRole === 'recruiter') {
-      setActiveTab('studio');
-      showToast('Switched to Recruiter Studio');
-    } else {
-      setActiveTab('drives');
-      showToast('Switched to Candidate Seeker mode');
+  // Recruiter Auth Handlers
+  const handleLoginSuccess = (session: RecruiterSession) => {
+    setRecruiterSession(session);
+    try {
+      localStorage.setItem('spothire_recruiter', JSON.stringify(session));
+    } catch (e) {
+      console.warn(e);
     }
+    setActiveTab('studio');
+    showToast(`Welcome ${session.name}! Studio unlocked.`);
+  };
+
+  const handleLogoutRecruiter = () => {
+    setRecruiterSession(null);
+    try {
+      localStorage.removeItem('spothire_recruiter');
+    } catch (e) {
+      console.warn(e);
+    }
+    setActiveTab('drives');
+    showToast('Logged out of Recruiter Studio. Returned to Seeker mode.');
   };
 
   const handleTabChange = (tab: 'drives' | 'passes' | 'studio' | 'referrals') => {
-    setActiveTab(tab);
-    if (tab === 'studio') {
-      setRole('recruiter');
-    } else {
-      setRole('candidate');
+    // Role Gate: Prevent seekers from opening studio
+    if (tab === 'studio' && !recruiterSession) {
+      setIsRecruiterAuthModalOpen(true);
+      return;
     }
+    setActiveTab(tab);
   };
 
   // Booking action
@@ -135,6 +158,31 @@ export default function App() {
       showToast('Venue check-in verified! Token authenticated.');
     } catch (err: any) {
       showToast('Failed to verify token');
+    }
+  };
+
+  // Fix #1.3: Cancel pass & release slot back to public drive
+  const handleCancelPass = async (passId: string) => {
+    try {
+      const result = await cancelPass(passId);
+      setPasses((prev) => prev.map((p) => (p.pass_id === passId ? result.pass : p)));
+      setDrives((prev) =>
+        prev.map((d) => (d.id === result.drive.id ? result.drive : d))
+      );
+      showToast('Pass cancelled & interview slot returned to public drive!');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to cancel pass');
+    }
+  };
+
+  // Fix #2.1: Gate reception token verification
+  const handleVerifyGateToken = async (token: string, note?: string) => {
+    try {
+      const verified = await verifyGateToken(token, note);
+      setPasses((prev) => prev.map((p) => (p.pass_id === verified.pass_id ? verified : p)));
+      showToast(`Admitted! ${verified.candidate_name} cleared at gate.`);
+    } catch (err: any) {
+      throw err; // Propagate to RecruiterStudio feedback banner
     }
   };
 
@@ -231,10 +279,11 @@ export default function App() {
         {/* Status Bar */}
         <StatusBar />
 
-        {/* Top Header with Role Toggle */}
+        {/* Top Header with Role Guard */}
         <Header
-          currentRole={role}
-          onRoleChange={handleRoleChange}
+          recruiterSession={recruiterSession}
+          onOpenRecruiterAuth={() => setIsRecruiterAuthModalOpen(true)}
+          onLogoutRecruiter={handleLogoutRecruiter}
           onOpenMysqlStudio={() => setIsMysqlStudioOpen(true)}
         />
 
@@ -328,6 +377,7 @@ export default function App() {
                   if (navigator.clipboard) navigator.clipboard.writeText(text);
                   showToast('Pass invite link copied!');
                 }}
+                onCancelPass={handleCancelPass}
                 onNavigateToDrives={() => setActiveTab('drives')}
               />
             </section>
@@ -336,12 +386,15 @@ export default function App() {
           {/* ============================================== */}
           {/* VIEW 3: RECRUITER STUDIO                       */}
           {/* ============================================== */}
-          {activeTab === 'studio' && (
+          {activeTab === 'studio' && recruiterSession && (
             <section className="animate-in fade-in duration-150">
               <RecruiterStudio
                 passes={passes}
+                recruiterSession={recruiterSession}
+                onLogout={handleLogoutRecruiter}
                 onUpdateStage={handleUpdateStage}
                 onCreateDrive={handleCreateDrive}
+                onVerifyGateToken={handleVerifyGateToken}
               />
             </section>
           )}
@@ -368,6 +421,8 @@ export default function App() {
           activeTab={activeTab}
           onTabChange={handleTabChange}
           hasPassesNotification={passes.length > 0}
+          isRecruiter={Boolean(recruiterSession)}
+          isExpandedLayout={isExpandedLayout}
         />
 
         {/* Slot Booking Modal */}
@@ -384,6 +439,13 @@ export default function App() {
           isOpen={Boolean(selectedQrPass)}
           onClose={() => setSelectedQrPass(null)}
           onCheckInSuccess={handleCheckInSuccess}
+        />
+
+        {/* Recruiter Authentication & Registration Modal */}
+        <RecruiterAuthModal
+          isOpen={isRecruiterAuthModalOpen}
+          onClose={() => setIsRecruiterAuthModalOpen(false)}
+          onLoginSuccess={handleLoginSuccess}
         />
 
         {/* MySQL Database Studio Modal */}

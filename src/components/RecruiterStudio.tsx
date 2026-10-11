@@ -1,22 +1,33 @@
 import React, { useState } from 'react';
-import { Building2, PlusCircle, Users, CheckCircle2, ArrowRight } from 'lucide-react';
-import { InterviewPass, Drive } from '../types/index.ts';
+import { Building2, PlusCircle, Users, CheckCircle2, ArrowRight, LogOut, ShieldCheck } from 'lucide-react';
+import { InterviewPass, Drive, RecruiterSession } from '../types/index.ts';
 
 interface RecruiterStudioProps {
   passes: InterviewPass[];
+  recruiterSession?: RecruiterSession | null;
+  onLogout?: () => void;
   onUpdateStage: (passId: string, stageIndex: number, note: string) => Promise<void>;
   onCreateDrive: (driveData: Partial<Drive>) => Promise<void>;
+  onVerifyGateToken: (token: string, note?: string) => Promise<void>;
 }
 
 export const RecruiterStudio: React.FC<RecruiterStudioProps> = ({
   passes,
+  recruiterSession,
+  onLogout,
   onUpdateStage,
   onCreateDrive,
+  onVerifyGateToken,
 }) => {
   const [subTab, setSubTab] = useState<'applicants' | 'create'>('applicants');
 
-  // Form State
-  const [companyName, setCompanyName] = useState('');
+  // Gate Scanner State (Fix #2.1)
+  const [gateTokenInput, setGateTokenInput] = useState('');
+  const [isVerifyingGate, setIsVerifyingGate] = useState(false);
+  const [gateFeedback, setGateFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Form State - initialized with recruiter company if available
+  const [companyName, setCompanyName] = useState(recruiterSession?.company_name || '');
   const [roleTitle, setRoleTitle] = useState('');
   const [dateCategory, setDateCategory] = useState<'Today' | 'Tomorrow' | 'Weekend'>('Today');
   const [format, setFormat] = useState<'walk-in' | 'virtual'>('walk-in');
@@ -25,6 +36,30 @@ export const RecruiterStudio: React.FC<RecruiterStudioProps> = ({
   const [vacancies, setVacancies] = useState(5);
   const [eligibility, setEligibility] = useState('');
   const [isPublishing, setIsPublishing] = useState(false);
+
+  const handleGateVerify = async (e?: React.FormEvent, directToken?: string) => {
+    if (e) e.preventDefault();
+    const token = directToken || gateTokenInput.trim();
+    if (!token) return;
+
+    try {
+      setIsVerifyingGate(true);
+      setGateFeedback(null);
+      await onVerifyGateToken(token);
+      setGateFeedback({
+        type: 'success',
+        message: `Token "${token}" verified! Candidate admitted & directed to Interview Bay.`,
+      });
+      setGateTokenInput('');
+    } catch (err: any) {
+      setGateFeedback({
+        type: 'error',
+        message: err.message || 'Token verification failed. Check code and try again.',
+      });
+    } finally {
+      setIsVerifyingGate(false);
+    }
+  };
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,6 +113,33 @@ export const RecruiterStudio: React.FC<RecruiterStudioProps> = ({
         <p className="text-xs text-slate-300 mt-1">
           Deploy walk-in slots in under 2 minutes. Instantly update applicant stages and verify venue check-in tokens.
         </p>
+
+        {recruiterSession && (
+          <div className="mt-3 pt-3 border-t border-slate-800 flex items-center justify-between text-xs">
+            <div className="flex items-center space-x-2">
+              <div className="w-6 h-6 rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center text-[10px]">
+                {recruiterSession.company_name[0]}
+              </div>
+              <div>
+                <span className="font-bold text-slate-200 block text-[11px] leading-tight">
+                  {recruiterSession.name}
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  {recruiterSession.company_name} · {recruiterSession.email}
+                </span>
+              </div>
+            </div>
+            {onLogout && (
+              <button
+                type="button"
+                onClick={onLogout}
+                className="text-[10px] font-bold text-rose-400 hover:text-rose-300 bg-rose-950/60 hover:bg-rose-900/60 border border-rose-800/60 px-2 py-1 rounded-lg transition"
+              >
+                Sign Out
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Sub Tabs */}
@@ -110,9 +172,76 @@ export const RecruiterStudio: React.FC<RecruiterStudioProps> = ({
 
       {/* View A: Applicants Queue */}
       {subTab === 'applicants' && (
-        <div className="space-y-3">
+        <div className="space-y-3.5">
+          {/* Fix #2.1: Gate Reception Scanner & Token Validator */}
+          <div className="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-sm space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Gate Security & Reception Desk Scanner</span>
+              </span>
+              <span className="text-[10px] font-mono text-slate-500">Venue Gate Check-in</span>
+            </div>
+
+            <form onSubmit={handleGateVerify} className="flex items-center space-x-2">
+              <input
+                type="text"
+                value={gateTokenInput}
+                onChange={(e) => setGateTokenInput(e.target.value)}
+                placeholder="Enter Token or Pass ID (e.g. AUTH-RZP-9041-IN)"
+                className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono uppercase focus:bg-white focus:outline-none focus:border-blue-600"
+              />
+              <button
+                type="submit"
+                disabled={isVerifyingGate || !gateTokenInput.trim()}
+                className="bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-xs flex items-center space-x-1 disabled:opacity-50 shrink-0"
+              >
+                <span>{isVerifyingGate ? 'Verifying...' : 'Admit Candidate'}</span>
+              </button>
+            </form>
+
+            {/* Quick-admit chips of candidates awaiting gate check-in */}
+            {passes.filter((p) => !p.checked_in && !p.is_cancelled).length > 0 && (
+              <div className="pt-1 flex items-center space-x-1.5 overflow-x-auto no-scrollbar text-[10px]">
+                <span className="text-slate-400 font-medium shrink-0">Awaiting Arrival:</span>
+                {passes
+                  .filter((p) => !p.checked_in && !p.is_cancelled)
+                  .map((p) => (
+                    <button
+                      key={p.pass_id}
+                      type="button"
+                      onClick={() => handleGateVerify(undefined, p.qr_token)}
+                      className="bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 rounded-lg px-2 py-0.5 whitespace-nowrap transition"
+                    >
+                      {p.candidate_name} ({p.pass_id})
+                    </button>
+                  ))}
+              </div>
+            )}
+
+            {/* Verification Result Feedback */}
+            {gateFeedback && (
+              <div
+                className={`p-2.5 rounded-xl text-xs font-medium flex items-center justify-between ${
+                  gateFeedback.type === 'success'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'bg-rose-50 text-rose-800 border border-rose-200'
+                }`}
+              >
+                <span>{gateFeedback.message}</span>
+                <button
+                  type="button"
+                  onClick={() => setGateFeedback(null)}
+                  className="text-xs font-bold px-1 hover:opacity-75"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center justify-between text-xs text-slate-500 px-1 font-medium">
-            <span>Today's Live Queue</span>
+            <span>Today's Live Queue ({passes.length})</span>
             <span>Update pass status in real-time</span>
           </div>
 
@@ -121,99 +250,152 @@ export const RecruiterStudio: React.FC<RecruiterStudioProps> = ({
               No candidates have claimed passes yet today.
             </div>
           ) : (
-            passes.map((pass) => (
-              <div
-                key={pass.pass_id}
-                className="bg-white rounded-2xl p-3.5 border border-slate-200/90 shadow-sm space-y-3"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <span className="font-bold text-slate-900 text-xs">{pass.candidate_name}</span>
-                      <span className="font-mono text-[10px] text-slate-400">{pass.pass_id}</span>
+            passes.map((pass) => {
+              const isCancelled = pass.is_cancelled || pass.stage_index === 6;
+              const isRejected = pass.stage_index === 5;
+
+              return (
+                <div
+                  key={pass.pass_id}
+                  className={`bg-white rounded-2xl p-3.5 border border-slate-200/90 shadow-xs space-y-3 ${
+                    isCancelled ? 'opacity-80 bg-slate-50/70' : ''
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <span className="font-bold text-slate-900 text-xs">{pass.candidate_name}</span>
+                        <span className="font-mono text-[10px] text-slate-400">{pass.pass_id}</span>
+                      </div>
+                      <div className="text-[11px] text-blue-700 font-semibold mt-0.5">
+                        {pass.company_name} · {pass.selected_slot}
+                      </div>
+                      <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                        {pass.candidate_phone}
+                        {pass.candidate_link && (
+                          <span>
+                            {' '}
+                            ·{' '}
+                            <a
+                              href={pass.candidate_link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline"
+                            >
+                              Profile
+                            </a>
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-[11px] text-blue-700 font-semibold mt-0.5">
-                      {pass.company_name} · {pass.selected_slot}
-                    </div>
-                    <div className="text-[10px] text-slate-500 font-mono mt-0.5">
-                      {pass.candidate_phone}
-                      {pass.candidate_link && (
-                        <span>
-                          {' '}
-                          ·{' '}
-                          <a
-                            href={pass.candidate_link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline"
-                          >
-                            Profile
-                          </a>
-                        </span>
-                      )}
-                    </div>
+
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded shrink-0 ${
+                        isCancelled
+                          ? 'bg-slate-200 text-slate-700'
+                          : isRejected
+                          ? 'bg-rose-100 text-rose-800'
+                          : pass.stage_index === 4
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : pass.checked_in
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}
+                    >
+                      {isCancelled
+                        ? 'No-Show / Cancelled'
+                        : isRejected
+                        ? 'Did Not Clear'
+                        : pass.stage_index === 4
+                        ? 'Offer Extended'
+                        : pass.checked_in
+                        ? 'Admitted at Venue'
+                        : 'Awaiting Check-in'}
+                    </span>
                   </div>
 
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded shrink-0 ${
-                      pass.checked_in
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : 'bg-slate-100 text-slate-700'
-                    }`}
-                  >
-                    {pass.checked_in ? 'Checked-in' : 'Awaiting Check-in'}
-                  </span>
-                </div>
+                  {/* Stage Progression Buttons (Fix #2.2: Added Did Not Clear & No-Show) */}
+                  {!isCancelled && (
+                    <div className="space-y-1.5 pt-1 border-t border-slate-100">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                        Update Candidate Stage:
+                      </span>
+                      <div className="grid grid-cols-3 gap-1.5 text-[10px]">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onUpdateStage(pass.pass_id, 1, 'Doc Screening Cleared. Verified candidate CV.')
+                          }
+                          className={`py-1.5 px-2 rounded-lg font-bold transition ${
+                            pass.stage_index === 1
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                        >
+                          Doc Screening
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onUpdateStage(pass.pass_id, 3, 'Currently in Technical Round with Engineering Team.')
+                          }
+                          className={`py-1.5 px-2 rounded-lg font-bold transition ${
+                            pass.stage_index === 3
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                        >
+                          In-Progress
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onUpdateStage(pass.pass_id, 4, 'Offer Extended! Congratulations on clearing all rounds.')
+                          }
+                          className={`py-1.5 px-2 rounded-lg font-bold transition ${
+                            pass.stage_index === 4
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                        >
+                          Decision / Offer
+                        </button>
+                      </div>
 
-                {/* Stage Progression Buttons */}
-                <div className="space-y-1.5 pt-1 border-t border-slate-100">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                    Update Candidate Stage:
-                  </span>
-                  <div className="grid grid-cols-3 gap-1.5 text-[10px]">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onUpdateStage(pass.pass_id, 1, 'Doc Screening Cleared. Verified candidate CV.')
-                      }
-                      className={`py-1.5 px-2 rounded-lg font-bold transition ${
-                        pass.stage_index === 1
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                      }`}
-                    >
-                      Doc Screening
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onUpdateStage(pass.pass_id, 3, 'Currently in Technical Round with Engineering Team.')
-                      }
-                      className={`py-1.5 px-2 rounded-lg font-bold transition ${
-                        pass.stage_index === 3
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                      }`}
-                    >
-                      In-Progress
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onUpdateStage(pass.pass_id, 4, 'Offer Extended! Congratulations on clearing all rounds.')
-                      }
-                      className={`py-1.5 px-2 rounded-lg font-bold transition ${
-                        pass.stage_index === 4
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                      }`}
-                    >
-                      Decision / Offer
-                    </button>
-                  </div>
+                      {/* Rejection & No-Show Handlers */}
+                      <div className="grid grid-cols-2 gap-1.5 text-[10px] pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onUpdateStage(pass.pass_id, 5, 'Did not clear Round 1 technical assessment.')
+                          }
+                          className={`py-1 px-2 rounded-lg font-bold transition ${
+                            pass.stage_index === 5
+                              ? 'bg-rose-600 text-white'
+                              : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+                          }`}
+                        >
+                          ✕ Did Not Clear
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onUpdateStage(pass.pass_id, 6, 'Candidate was absent / marked No-Show.')
+                          }
+                          className={`py-1 px-2 rounded-lg font-bold transition ${
+                            pass.stage_index === 6
+                              ? 'bg-slate-700 text-white'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
+                          }`}
+                        >
+                          ⊘ Mark No-Show
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       )}

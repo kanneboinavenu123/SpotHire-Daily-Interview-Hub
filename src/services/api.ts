@@ -1,4 +1,35 @@
-import { Drive, InterviewPass, ReferralData, SqlQueryResult } from '../types/index.ts';
+import { Drive, InterviewPass, ReferralData, SqlQueryResult, RecruiterSession } from '../types/index.ts';
+
+export async function loginRecruiter(email: string, password: string): Promise<RecruiterSession> {
+  const res = await fetch('/api/auth/recruiter-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Login failed' }));
+    throw new Error(err.error || 'Invalid credentials');
+  }
+  return await res.json();
+}
+
+export async function registerRecruiter(data: {
+  email: string;
+  password: string;
+  name: string;
+  company_name: string;
+}): Promise<RecruiterSession> {
+  const res = await fetch('/api/auth/recruiter-register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Registration failed' }));
+    throw new Error(err.error || 'Registration failed');
+  }
+  return await res.json();
+}
 
 export async function fetchDrives(): Promise<Drive[]> {
   try {
@@ -44,7 +75,34 @@ export async function createPass(bookingData: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(bookingData),
   });
-  if (!res.ok) throw new Error('Failed to create pass');
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Failed to create pass' }));
+    throw new Error(err.error || 'Failed to create pass');
+  }
+  return await res.json();
+}
+
+export async function cancelPass(passId: string): Promise<{ pass: InterviewPass; drive: Drive }> {
+  const res = await fetch(`/api/passes/${passId}/cancel`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Failed to cancel pass' }));
+    throw new Error(err.error || 'Failed to cancel pass');
+  }
+  return await res.json();
+}
+
+export async function verifyGateToken(token: string, gateNote?: string): Promise<InterviewPass> {
+  const res = await fetch('/api/passes/verify-gate-token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, gate_note: gateNote }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Invalid token' }));
+    throw new Error(err.error || 'Failed to verify token');
+  }
   return await res.json();
 }
 

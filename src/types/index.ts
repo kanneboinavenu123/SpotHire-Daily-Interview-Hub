@@ -42,11 +42,12 @@ export interface InterviewPass {
   selected_slot: string;
   interview_type: 'walk-in' | 'virtual';
   venue_or_link: string;
-  stage_index: number; // 0: Applied, 1: Screening, 2: Slot Confirmed, 3: In Progress, 4: Offer Extended
+  stage_index: number; // 0: Applied, 1: Screening, 2: Slot Confirmed, 3: In Progress, 4: Offer Extended, 5: Did Not Clear, 6: No-Show
   checked_in: boolean;
   qr_token: string;
   recruiter_note: string;
   countdown_target: string;
+  is_cancelled?: boolean;
   created_at?: string;
 }
 
@@ -64,4 +65,13 @@ export interface SqlQueryResult {
   rows: any[];
   executionTimeMs: number;
   affectedRows?: number;
+}
+
+export interface RecruiterSession {
+  id: string;
+  email: string;
+  name: string;
+  company_name: string;
+  role: string;
+  token: string;
 }

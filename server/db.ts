@@ -33,11 +33,12 @@ export interface InterviewPassRecord {
   selected_slot: string;
   interview_type: 'walk-in' | 'virtual';
   venue_or_link: string;
-  stage_index: number; // 0..4
+  stage_index: number; // 0..6 (0: Applied, 1: Screening, 2: Confirmed, 3: In Progress, 4: Cleared, 5: Did Not Clear, 6: No-Show)
   checked_in: boolean;
   qr_token: string;
   recruiter_note: string;
   countdown_target: string;
+  is_cancelled?: boolean;
   created_at: string;
 }
 
@@ -51,9 +52,20 @@ export interface ReferralRecord {
   created_at: string;
 }
 
+export interface RecruiterAccountRecord {
+  id: string;
+  email: string;
+  password_hash: string;
+  name: string;
+  company_name: string;
+  role: 'recruiter' | 'admin';
+  created_at: string;
+}
+
 class RelationalDatabase {
   private drives: Map<string, DriveRecord> = new Map();
   private passes: Map<string, InterviewPassRecord> = new Map();
+  private recruiters: Map<string, RecruiterAccountRecord> = new Map();
   private referrals: ReferralRecord = {
     id: 1,
     ref_code: 'SPOT-PRIORITY-8821',
@@ -205,6 +217,121 @@ class RelationalDatabase {
     };
 
     this.passes.set(initialPass.pass_id, initialPass);
+
+    // Pre-seeded Demo Recruiter Accounts
+    const demoRecruiters: RecruiterAccountRecord[] = [
+      {
+        id: 'rec-1',
+        email: 'pooja@razorpay.com',
+        password_hash: 'razorpay123',
+        name: 'Pooja Iyer (TA Lead)',
+        company_name: 'Razorpay',
+        role: 'recruiter',
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'rec-2',
+        email: 'rohit@zepto.com',
+        password_hash: 'zepto123',
+        name: 'Rohit Verma (Ops HR)',
+        company_name: 'Zepto',
+        role: 'recruiter',
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'rec-3',
+        email: 'ananya@swiggy.com',
+        password_hash: 'swiggy123',
+        name: 'Ananya Roy (Tech Hiring)',
+        company_name: 'Swiggy',
+        role: 'recruiter',
+        created_at: new Date().toISOString(),
+      },
+    ];
+    demoRecruiters.forEach((r) => this.recruiters.set(r.email.toLowerCase(), r));
+  }
+
+  public loginRecruiter(email: string, password: string): {
+    id: string;
+    email: string;
+    name: string;
+    company_name: string;
+    role: string;
+    token: string;
+  } {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanPassword = (password || '').trim();
+
+    if (!cleanEmail || !cleanPassword) {
+      throw new Error('Email address and password are required.');
+    }
+
+    const recruiter = this.recruiters.get(cleanEmail);
+    if (!recruiter || recruiter.password_hash !== cleanPassword) {
+      throw new Error('Invalid email or password. Please check your credentials or use a demo account.');
+    }
+
+    return {
+      id: recruiter.id,
+      email: recruiter.email,
+      name: recruiter.name,
+      company_name: recruiter.company_name,
+      role: recruiter.role,
+      token: `AUTH-SESSION-${recruiter.id}-${Date.now()}`,
+    };
+  }
+
+  public registerRecruiter(data: {
+    email: string;
+    password: string;
+    name: string;
+    company_name: string;
+  }): {
+    id: string;
+    email: string;
+    name: string;
+    company_name: string;
+    role: string;
+    token: string;
+  } {
+    const cleanEmail = (data.email || '').trim().toLowerCase();
+    const cleanPassword = (data.password || '').trim();
+    const cleanName = (data.name || '').trim();
+    const cleanCompany = (data.company_name || '').trim();
+
+    if (!cleanEmail || !cleanPassword || !cleanName || !cleanCompany) {
+      throw new Error('All fields (Full Name, Company Name, Email, Password) are required.');
+    }
+
+    if (cleanPassword.length < 6) {
+      throw new Error('Password must be at least 6 characters long.');
+    }
+
+    if (this.recruiters.has(cleanEmail)) {
+      throw new Error(`A recruiter account already exists for ${cleanEmail}. Please sign in instead.`);
+    }
+
+    const id = `rec-${Date.now()}`;
+    const newAccount: RecruiterAccountRecord = {
+      id,
+      email: cleanEmail,
+      password_hash: cleanPassword,
+      name: cleanName,
+      company_name: cleanCompany,
+      role: 'recruiter',
+      created_at: new Date().toISOString(),
+    };
+
+    this.recruiters.set(cleanEmail, newAccount);
+
+    return {
+      id: newAccount.id,
+      email: newAccount.email,
+      name: newAccount.name,
+      company_name: newAccount.company_name,
+      role: newAccount.role,
+      token: `AUTH-SESSION-${newAccount.id}-${Date.now()}`,
+    };
   }
 
   public getDrives(): DriveRecord[] {
@@ -263,13 +390,37 @@ class RelationalDatabase {
   }): InterviewPassRecord {
     const drive = this.drives.get(data.drive_id);
     if (!drive) {
-      throw new Error(`Drive ${data.drive_id} not found`);
+      throw new Error(`Drive "${data.drive_id}" not found.`);
+    }
+
+    // Fix #1.1: Prevent overbooking on sold-out drives
+    if (drive.remaining_slots <= 0) {
+      throw new Error(`Sold Out: This interview drive has 0 remaining slots. Overbooking is blocked.`);
+    }
+
+    // Fix #1.2: Mobile number validation & duplicate booking prevention
+    const cleanPhone = (data.candidate_phone || '').replace(/\D/g, '');
+    if (cleanPhone.length < 10) {
+      throw new Error(`Invalid phone number: Please provide a valid 10-digit mobile number for verified SMS pass delivery.`);
+    }
+
+    const existingActivePass = Array.from(this.passes.values()).find((p) => {
+      const existingCleanPhone = p.candidate_phone.replace(/\D/g, '');
+      return (
+        p.drive_id === data.drive_id &&
+        existingCleanPhone === cleanPhone &&
+        !p.is_cancelled
+      );
+    });
+
+    if (existingActivePass) {
+      throw new Error(
+        `Duplicate Reservation: You already hold an active pass (${existingActivePass.pass_id}) for ${drive.company_name} with phone ${data.candidate_phone}.`
+      );
     }
 
     // Decrement available slots
-    if (drive.remaining_slots > 0) {
-      drive.remaining_slots -= 1;
-    }
+    drive.remaining_slots -= 1;
 
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const pass_id = `SP-2026-${randomSuffix}`;
@@ -292,6 +443,7 @@ class RelationalDatabase {
       qr_token,
       recruiter_note: 'Pass confirmed. Please carry 2 hard copies of your CV and government photo ID.',
       countdown_target: new Date(Date.now() + 3 * 3600 * 1000 + 45 * 60 * 1000).toISOString(),
+      is_cancelled: false,
       created_at: new Date().toISOString(),
     };
 
@@ -299,12 +451,62 @@ class RelationalDatabase {
     return newPass;
   }
 
+  // Fix #1.3: Cancel pass and release slot back to the public pool
+  public cancelPass(pass_id: string): { pass: InterviewPassRecord; drive: DriveRecord } {
+    const pass = this.passes.get(pass_id);
+    if (!pass) {
+      throw new Error(`Pass "${pass_id}" not found.`);
+    }
+    if (pass.is_cancelled) {
+      throw new Error(`Pass "${pass_id}" is already cancelled.`);
+    }
+
+    pass.is_cancelled = true;
+    pass.stage_index = 6; // Marked as cancelled/vacated
+    pass.recruiter_note = 'Pass voluntarily cancelled by candidate. Slot released back to public drive pool.';
+
+    const drive = this.drives.get(pass.drive_id);
+    if (drive) {
+      drive.remaining_slots += 1;
+    }
+
+    return { pass, drive: drive! };
+  }
+
+  // Fix #2.1: Gate reception token validator for security / reception desk
+  public verifyGateToken(token: string, gate_note?: string): InterviewPassRecord {
+    const clean = (token || '').trim().toUpperCase();
+    if (!clean) {
+      throw new Error('Please enter a valid Pass ID or QR Token (e.g. AUTH-RZP-9041-IN or SP-2026-9041).');
+    }
+
+    const pass = Array.from(this.passes.values()).find(
+      (p) => p.qr_token.toUpperCase() === clean || p.pass_id.toUpperCase() === clean
+    );
+
+    if (!pass) {
+      throw new Error(`Token "${token}" not recognized. No active reservation found for this code.`);
+    }
+
+    if (pass.is_cancelled) {
+      throw new Error(`Admission Denied: Pass ${pass.pass_id} was cancelled by candidate.`);
+    }
+
+    pass.checked_in = true;
+    pass.stage_index = Math.max(pass.stage_index, 3); // Move to In Progress
+    const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    pass.recruiter_note = gate_note || `Security verification cleared at ${timeNow}. Admitted at Reception Desk & directed to Interview Bay.`;
+
+    return pass;
+  }
+
+  // Fix #2.2: Stage progression supporting Did Not Clear (5) and No-Show (6)
   public updatePassStage(pass_id: string, stage_index: number, recruiter_note?: string): InterviewPassRecord {
     const pass = this.passes.get(pass_id);
     if (!pass) {
       throw new Error(`Pass ${pass_id} not found`);
     }
-    pass.stage_index = Math.max(0, Math.min(4, stage_index));
+    pass.stage_index = Math.max(0, Math.min(6, stage_index));
     if (recruiter_note) {
       pass.recruiter_note = recruiter_note;
     }

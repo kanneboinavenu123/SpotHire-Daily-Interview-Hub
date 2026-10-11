@@ -1,0 +1,6 @@
+{
+  "summary":  "Comprehensive architectural and UX plan for role-based access control, isolating Job Seekers from the Recruiter Studio with email/password authentication, persistent sessions, and hidden recruiter navigation.",
+  "updatedAt":  "2026-10-11T05:10:11.995407912Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

@@ -1,13 +1,20 @@
 import React from 'react';
-import { Zap, User, Building2, Database } from 'lucide-react';
+import { Zap, Building2, Database, Lock, LogOut } from 'lucide-react';
+import { RecruiterSession } from '../types/index.ts';
 
 interface HeaderProps {
-  currentRole: 'candidate' | 'recruiter';
-  onRoleChange: (role: 'candidate' | 'recruiter') => void;
+  recruiterSession: RecruiterSession | null;
+  onOpenRecruiterAuth: () => void;
+  onLogoutRecruiter: () => void;
   onOpenMysqlStudio: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ currentRole, onRoleChange, onOpenMysqlStudio }) => {
+export const Header: React.FC<HeaderProps> = ({
+  recruiterSession,
+  onOpenRecruiterAuth,
+  onLogoutRecruiter,
+  onOpenMysqlStudio,
+}) => {
   return (
     <header className="px-4 py-3 bg-white border-b border-slate-200/80 sticky top-0 z-30">
       <div className="flex items-center justify-between">
@@ -31,43 +38,46 @@ export const Header: React.FC<HeaderProps> = ({ currentRole, onRoleChange, onOpe
           </div>
         </div>
 
-        {/* Right side controls: MySQL Studio pill & Dual-Mode Role Toggle */}
+        {/* Right side controls: MySQL Studio pill & Recruiter Portal Guard */}
         <div className="flex items-center space-x-2">
           {/* Quick MySQL Database Button */}
           <button
+            type="button"
             onClick={onOpenMysqlStudio}
             title="Inspect MySQL Schema & Run SQL Queries"
-            className="hidden xs:flex items-center space-x-1 text-[11px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-full border border-slate-200 transition"
+            className="hidden xs:flex items-center space-x-1 text-[11px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 rounded-full border border-slate-200 transition"
           >
             <Database className="w-3.5 h-3.5 text-blue-600" />
             <span className="font-mono text-[10px]">MySQL</span>
           </button>
 
-          {/* Seeker / Studio toggle pill from Image 1 */}
-          <div className="flex items-center bg-slate-100 p-0.5 rounded-full border border-slate-200">
+          {/* Conditional Role Authentication Control */}
+          {recruiterSession ? (
+            <div className="flex items-center space-x-1.5">
+              <span className="inline-flex items-center space-x-1 text-[11px] font-bold text-blue-800 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-full">
+                <Building2 className="w-3 h-3 text-blue-600" />
+                <span className="truncate max-w-[80px] xs:max-w-[110px]">{recruiterSession.company_name} Studio</span>
+              </span>
+              <button
+                type="button"
+                onClick={onLogoutRecruiter}
+                className="flex items-center space-x-1 text-xs font-bold text-rose-700 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1 rounded-xl transition shadow-2xs"
+                title="Log out of Recruiter Studio"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Log Out</span>
+              </button>
+            </div>
+          ) : (
             <button
-              onClick={() => onRoleChange('candidate')}
-              className={`px-2.5 py-1 text-xs font-semibold rounded-full transition-all flex items-center space-x-1 ${
-                currentRole === 'candidate'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
+              type="button"
+              onClick={onOpenRecruiterAuth}
+              className="flex items-center space-x-1.5 text-xs font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full border border-slate-200 transition shadow-2xs"
             >
-              <User className={`w-3.5 h-3.5 ${currentRole === 'candidate' ? 'text-blue-600' : 'text-slate-400'}`} />
-              <span>Seeker</span>
+              <Lock className="w-3 h-3 text-slate-500" />
+              <span>Recruiter Sign In</span>
             </button>
-            <button
-              onClick={() => onRoleChange('recruiter')}
-              className={`px-2.5 py-1 text-xs font-semibold rounded-full transition-all flex items-center space-x-1 ${
-                currentRole === 'recruiter'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Building2 className={`w-3.5 h-3.5 ${currentRole === 'recruiter' ? 'text-blue-600' : 'text-slate-400'}`} />
-              <span>Studio</span>
-            </button>
-          </div>
+          )}
         </div>
       </div>
     </header>
